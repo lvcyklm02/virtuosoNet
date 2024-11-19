@@ -286,9 +286,7 @@ class HAN_Integrated(nn.Module):
             perform_measure = self.make_higher_node(perform_note_encoded, self.performance_measure_attention,
                                                     beat_numbers, measure_numbers, start_index, lower_is_note=True)
             perform_style_encoded, _ = self.performance_encoder(perform_measure)
-            # perform_style_reduced = perform_style_reduced.view(-1,self.encoder_input_size)
-            # perform_style_node = self.sum_with_attention(perform_style_reduced, self.perform_attention)
-            # perform_style_vector = perform_style_encoded[:, -1, :]  # need check
+
             perform_style_vector = self.performance_final_attention(perform_style_encoded)
             perform_z, perform_mu, perform_var = \
                 self.encode_with_net(perform_style_vector, self.performance_encoder_mean, self.performance_encoder_var)
@@ -301,7 +299,6 @@ class HAN_Integrated(nn.Module):
             mean_perform_z = torch.mean(total_perform_z, 0, True)
 
             return mean_perform_z
-        # perform_z = self.performance_decoder(perform_z)
         perform_z = self.style_vector_expandor(perform_z)
         perform_z_batched = perform_z.repeat(x.shape[1], 1).view(1,x.shape[1], -1)
         perform_z = perform_z.view(-1)
@@ -460,11 +457,6 @@ class HAN_Integrated(nn.Module):
                 tempos = self.beat_tempo_fc(beat_forward)
                 num_notes = note_out.size(1)
                 tempos_spanned = self.span_beat_to_note_num(tempos, beat_numbers, num_notes, start_index)
-                # y[0, :, 0] = tempos_spanned.view(-1)
-
-                # mean_velocity_info = x[:, :, mean_vel_start_index:mean_vel_start_index+4].view(1,-1,4)
-                # dynamic_info = torch.cat((x[:, :, mean_vel_start_index + 4].view(1,-1,1),
-                #                           x[:, :, vel_vec_start_index:vel_vec_start_index + 4]), 2).view(1,-1,5)
 
                 out_combined = torch.cat((
                     note_out, beat_out_spanned, measure_out_spanned,
@@ -474,7 +466,6 @@ class HAN_Integrated(nn.Module):
                 out, final_hidden = self.output_lstm(out_combined, final_hidden)
 
                 out = self.fc(out)
-                # out = torch.cat((out, trill_out), 2)
 
                 out = torch.cat((tempos_spanned, out), 2)
                 score_combined = torch.cat((
@@ -529,10 +520,6 @@ class HAN_Integrated(nn.Module):
         std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
         return eps.mul(std).add_(mu)
-
-    # def decode_with_net(self, z, decode_network):
-    #     decode_network
-    #     return
 
     def sum_with_attention(self, hidden, attention_net):
         attention = attention_net(hidden)
@@ -658,9 +645,6 @@ class TrillRNN(nn.Module):
         self.is_graph = False
         self.loss_type = 'MSE'
 
-        # self.lstm = nn.LSTM(self.input_size, self.hidden_size, self.num_layers, batch_first=True, bidirectional=True, dropout=DROP_OUT)
-        # self.fc = nn.Linear(hidden_size * 2, num_output)  # 2 for
-
         self.note_fc = nn.Sequential(
             nn.Linear(self.input_size, self.hidden_size),
             nn.ReLU(),
@@ -704,9 +688,6 @@ class TrillGraph(nn.Module):
         self.is_trill_index = trill_index
         self.device = device
 
-        # self.lstm = nn.LSTM(self.input_size, self.hidden_size, self.num_layers, batch_first=True, bidirectional=True, dropout=DROP_OUT)
-        # self.fc = nn.Linear(hidden_size * 2, num_output)  # 2 for
-
         self.note_fc = nn.Sequential(
             nn.Linear(self.input_size, self.hidden_size),
             nn.ReLU(),
@@ -725,8 +706,6 @@ class TrillGraph(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x, edges):
-        # hidden = self.init_hidden(x.size(0))
-        # hidden_out, hidden = self.lstm(x, hidden)  # out: tensor of shape (batch_size, seq_length, hidden_size*2)
         if edges.shape[0] != self.num_edge_types:
             edges = edges[:self.num_edge_types, :, :]
 
@@ -744,5 +723,5 @@ class TrillGraph(nn.Module):
             out[:,:,-1] = up_trill
         else:
             out = self.sigmoid(out)
-        # out = out * is_trill_mat
+
         return out
