@@ -150,9 +150,9 @@ N_EDGE_TYPE = len(GRAPH_KEYS) * 2
 
 batch_size = 1
 
-torch.cuda.set_device(args.device)
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+# torch.cuda.set_device(args.device)
+# DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+DEVICE = torch.device("mps")
 if args.sessMode == 'train' and not args.resumeTraining:
     NET_PARAM = param.initialize_model_parameters_by_code(args.modelCode)
     NET_PARAM.num_edge_types = N_EDGE_TYPE
@@ -1045,8 +1045,8 @@ elif args.sessMode in ['test', 'testAll', 'testAllzero', 'encode', 'encodeAll', 
         print("=> loading checkpoint '{}'".format(args.modelCode + args.resume))
         # model_codes = ['prime', 'trill']
         filename = 'prime_' + args.modelCode + args.resume
-        print('device is ', args.device)
-        torch.cuda.set_device(args.device)
+        # print('device is ', args.device)
+        # torch.cuda.set_device(args.device)
         if torch.cuda.is_available():
             map_location = lambda storage, loc: storage.cuda()
         else:
