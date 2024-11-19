@@ -21,6 +21,9 @@ QPM_PRIMO_IDX = 4
 TEMPO_PRIMO_IDX = -2
 NUM_VOICE_FEED_PARAM = 2
 
+"""
+compatible with models: han_ar_single (excludes measure-level modules), han_ar_note (measure-level modules)
+"""
 class GatedGraph(nn.Module):
     def  __init__(self, size, num_edge_style, device=0, secondary_size=0):
         super(GatedGraph, self).__init__()

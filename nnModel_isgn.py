@@ -1,3 +1,7 @@
+"""
+compatible with models isgn
+"""
+
 class ISGN(nn.Module):
     def __init__(self, network_parameters, device):
         super(ISGN, self).__init__()
