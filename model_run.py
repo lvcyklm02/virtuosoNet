@@ -177,7 +177,7 @@ elif 'han' in args.modelCode:
         step_by_step = True
     else:
         step_by_step = False
-    MODEL = nnModel.HAN_Integrated(NET_PARAM, DEVICE, step_by_step).to(DEVICE)
+    MODEL = nnModel.HAN_Integrated(NET_PARAM, DEVICE, step_by_step, pedal_only=True).to(DEVICE)
 elif 'trill' in args.modelCode:
     MODEL = nnModel.TrillRNN(NET_PARAM, DEVICE).to(DEVICE)
 else:
@@ -1054,6 +1054,16 @@ elif args.sessMode in ['test', 'testAll', 'testAllzero', 'encode', 'encodeAll', 
         checkpoint = torch.load(filename, map_location=map_location)
         # args.start_epoch = checkpoint['epoch']
         # best_valid_loss = checkpoint['best_valid_loss']
+
+        # lucykim: load trained output lstm variables into the Custom Masked LSTM.
+        # the "missing" self.state_dict entries already exist under the alias "output_lstm"
+        missing_entries_prefix = 'wrapper_output_lstm.lstm.'
+        missing_entries_suffix = ['weight_ih_l0', 'weight_hh_l0', 'bias_ih_l0', 'bias_hh_l0']
+        alias_prefix = 'output_lstm.'
+        for m in missing_entries_suffix:
+
+            checkpoint['state_dict'][missing_entries_prefix + m] = checkpoint['state_dict'][alias_prefix + m]
+
         MODEL.load_state_dict(checkpoint['state_dict'])
         # MODEL.num_graph_iteration = 10
         print("=> loaded checkpoint '{}' (epoch {})"
@@ -1069,7 +1079,7 @@ elif args.sessMode in ['test', 'testAll', 'testAllzero', 'encode', 'encodeAll', 
 
         if IN_HIER:
             HIER_MODEL_PARAM = param.load_parameters(args.hierCode + '_param')
-            HIER_MODEL = nnModel.HAN_Integrated(HIER_MODEL_PARAM, DEVICE, True).to(DEVICE)
+            HIER_MODEL = nnModel.HAN_Integrated(HIER_MODEL_PARAM, DEVICE, step_by_step=True, pedal_only=True).to(DEVICE)
             filename = 'prime_' + args.hierCode + args.resume
             checkpoint = torch.load(filename, map_location=DEVICE)
             HIER_MODEL.load_state_dict(checkpoint['state_dict'])

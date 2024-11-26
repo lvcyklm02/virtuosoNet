@@ -7,6 +7,7 @@ import random
 import numpy
 import math
 import model_constants as cons
+from nnModel_pedalonly_lstm import CustomMaskedLSTM
 
 
 DROP_OUT = 0.1
@@ -115,7 +116,7 @@ class ContextAttention(nn.Module):
 
 
 class HAN_Integrated(nn.Module):
-    def __init__(self, network_parameters, device, step_by_step=False):
+    def __init__(self, network_parameters, device, step_by_step=False, pedal_only=False):
         super(HAN_Integrated, self).__init__()
         self.device = device
         self.step_by_step = step_by_step
@@ -128,7 +129,6 @@ class HAN_Integrated(nn.Module):
             self.test_version = True
         else:
             self.test_version = False
-        # self.is_simplified_note = network_parameters.is_simplified
 
         self.input_size = network_parameters.input_size
         self.output_size = network_parameters.output_size
@@ -151,6 +151,13 @@ class HAN_Integrated(nn.Module):
         self.encoder_layer_num = network_parameters.encoder.layer
         self.num_attention_head = network_parameters.num_attention_head
         self.num_edge_types = network_parameters.num_edge_types
+
+        # lucykim: MASK 
+        if pedal_only:
+            self.output_mask = torch.zeros((self.final_hidden_size,))
+            self.output_mask[3] = 1
+        else:
+            self.output_mask = torch.ones((self.final_hidden_size,))
 
         if self.is_graph:
             self.graph_1st = GatedGraph(self.hidden_size, self.num_edge_types)
@@ -179,6 +186,7 @@ class HAN_Integrated(nn.Module):
             self.measure_rnn = nn.LSTM(self.beat_hidden_size * 2, self.measure_hidden_size, self.num_measure_layers, batch_first=True, bidirectional=True)
             self.perform_style_to_measure = nn.LSTM(self.measure_hidden_size * 2 + self.encoder_size, self.encoder_size, num_layers=1, bidirectional=False)
 
+            # PERFORMANCE DECODER INITALIZATION FOUND
             if self.hierarchy == 'measure':
                 self.output_lstm = nn.LSTM(self.measure_hidden_size * 2 + self.encoder_size + self.output_size, self.final_hidden_size, num_layers=1, batch_first=True)
             elif self.hierarchy == 'beat':
@@ -215,7 +223,11 @@ class HAN_Integrated(nn.Module):
         if self.hierarchy:
             self.fc = nn.Linear(self.final_hidden_size, self.output_size)
         else:
-            self.output_lstm = nn.LSTM(self.final_input, self.final_hidden_size, num_layers=1, batch_first=True, bidirectional=False)
+            # lucykim: hijack the output lstm to allow for masking at every step to just consider pedal info
+            #self.output_lstm = nn.LSTM(self.final_input, self.final_hidden_size, num_layers=1, batch_first=True, bidirectional=False)
+            self.wrapper_output_lstm = CustomMaskedLSTM(self.final_input, self.final_hidden_size, self.output_mask)
+            self.output_lstm = self.wrapper_output_lstm.lstm
+
             if self.is_baseline:
                 self.fc = nn.Linear(self.final_hidden_size, self.output_size)
             else:
@@ -267,8 +279,6 @@ class HAN_Integrated(nn.Module):
                 zero_mean = torch.zeros(self.encoded_vector_size)
                 one_std = torch.ones(self.encoded_vector_size)
                 perform_z = self.reparameterize(zero_mean, one_std).to(self.device)
-            # if type(initial_z) is list:
-            #     perform_z = self.reparameterize(torch.Tensor(initial_z), torch.Tensor(initial_z)).to(self.device)
             elif not initial_z.is_cuda:
                 perform_z = torch.Tensor(initial_z).to(self.device).view(1,-1)
             else:
@@ -335,9 +345,8 @@ class HAN_Integrated(nn.Module):
             out_total = torch.zeros(1, num_hierarchy_nodes, self.output_size).to(self.device)
 
             for i in range(num_hierarchy_nodes):
-                # print(hierarchy_nodes_latent_combined.shape, prev_out.shape)
                 out_combined = torch.cat((hierarchy_nodes_latent_combined[:,i:i+1,:], prev_out),2)
-                out, out_hidden_state = self.output_lstm(out_combined, out_hidden_state)
+                out, out_hidden_state = self.wrapper_output_lstm(out_combined, out_hidden_state)
                 out = self.fc(out)
                 out_total[:,i,:] = out
                 prev_out = out.view(1,1,-1)
@@ -366,7 +375,7 @@ class HAN_Integrated(nn.Module):
                 if self.is_baseline:
                     for i in range(num_notes):
                         out_combined = torch.cat((note_out[0, i, :], prev_out, qpm_primo, tempo_primo, perform_z)).view(1, 1, -1)
-                        out, final_hidden = self.output_lstm(out_combined, final_hidden)
+                        out, final_hidden = self.wrapper_output_lstm(out_combined, final_hidden)
 
                         out = out.view(-1)
                         out = self.fc(out)
@@ -426,7 +435,7 @@ class HAN_Integrated(nn.Module):
                                 (note_out[0, i, :], beat_hidden_out[0, current_beat, :],
                                  measure_hidden_out[0, current_measure, :],
                                  prev_out, qpm_primo, tempo_primo, perform_z)).view(1, 1, -1)
-                        out, final_hidden = self.output_lstm(out_combined, final_hidden)
+                        out, final_hidden = self.wrapper_output_lstm(out_combined, final_hidden)
                         # out = torch.cat((out, out_combined), 2)
                         out = out.view(-1)
                         out = self.fc(out)
@@ -463,7 +472,7 @@ class HAN_Integrated(nn.Module):
                     # qpm_primo, tempo_primo, mean_velocity_info, dynamic_info,
                     perform_z_batched), 2)
 
-                out, final_hidden = self.output_lstm(out_combined, final_hidden)
+                out, final_hidden = self.wrapper_output_lstm(out_combined, final_hidden)
 
                 out = self.fc(out)
 
